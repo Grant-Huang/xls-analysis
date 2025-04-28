@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>数据分析仪表板 v1.16</title>
+    <title>数据分析仪表板 v1.18</title>
     <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
     <!-- 使用多个备用 CDN -->
     <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
@@ -72,7 +72,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center mb-4">数据分析仪表板 <small class="text-muted">v1.16</small></h1>
+        <h1 class="text-center mb-4">数据分析仪表板 <small class="text-muted">v1.18</small></h1>
         
         <div class="main-layout">
             <!-- 左侧配置区 -->
@@ -506,6 +506,7 @@
         
         let currentCharts = [];
         let columns = [];
+        let currentFilename = null;  // 添加全局变量存储当前文件名
         const operators = [
             { value: '=', label: '等于' },
             { value: '!=', label: '不等于' },
@@ -533,6 +534,8 @@
                         throw new Error(data.error);
                     }
                     columns = data.columns;
+                    currentFilename = data.filename;  // 保存文件名
+                    console.log('当前文件名:', currentFilename);  // 添加日志
                     updateColumnSelects(columns);
                 })
                 .catch(error => {
@@ -609,7 +612,10 @@
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ column: column })
+                        body: JSON.stringify({ 
+                            column: column,
+                            filename: currentFilename  // 添加文件名
+                        })
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -661,7 +667,10 @@
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ column: column })
+                        body: JSON.stringify({ 
+                            column: column,
+                            filename: currentFilename  // 添加文件名
+                        })
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -796,10 +805,17 @@
             }
             
             const config = {
-                chartType: chartType,
-                xAxis: xAxis,
-                yAxis: yAxis,
-                filterConditions: filterConditions || []
+                chartType,
+                xAxis,
+                yAxis,
+                groupBy: groupBy || null,
+                filterConditions,
+                zAxis: zAxis || null,
+                sizeColumn: sizeColumn || null,
+                parallelColumn: parallelColumn || null,
+                parentColumn: parentColumn || null,
+                flowColumn: flowColumn || null,
+                filename: currentFilename  // 添加文件名
             };
 
             // 根据图表类型添加特殊参数
@@ -866,11 +882,15 @@
                 if (data.error) {
                     throw new Error(data.error);
                 }
+                if (!data || !data.data) {
+                    throw new Error('服务器返回的数据格式不正确');
+                }
                 createChart(data);
             })
             .catch(error => {
                 console.error('生成图表时出错:', error);
-                alert('请求出错: ' + error.message);
+                const errorMessage = error.message || '未知错误';
+                alert(`生成图表时出错: ${errorMessage}`);
             });
         });
         
@@ -886,50 +906,73 @@
 
                 // 准备图表数据
                 const traces = data.data.map(trace => {
-                    if (!trace) return null;
-                    return {
-                        type: trace.type || 'scatter',
-                        x: trace.x || [],
-                        y: trace.y || [],
-                        labels: trace.labels || [],
-                        values: trace.values || [],
-                        name: trace.name || '',
-                        mode: trace.mode || 'markers',
-                        marker: trace.marker || {},
-                        textinfo: trace.textinfo || 'none',
-                        hoverinfo: trace.hoverinfo || 'all',
-                        fill: trace.fill || 'none',
-                        node: trace.node || {},
-                        link: trace.link || {},
-                        dimensions: trace.dimensions || [],
-                        line: trace.line || {}
-                    };
+                    if (!trace) {
+                        throw new Error('图表数据中存在无效的trace');
+                    }
+                    
+                    // 根据图表类型处理数据
+                    if (trace.type === 'pie') {
+                        return {
+                            type: 'pie',
+                            labels: trace.labels || [],
+                            values: trace.values || [],
+                            name: trace.name || null,
+                            hole: trace.hole || 0.3
+                        };
+                    } else if (trace.type === 'sankey') {
+                        return {
+                            type: 'sankey',
+                            orientation: 'h',
+                            node: {
+                                pad: 15,
+                                thickness: 30,
+                                line: {
+                                    color: "black",
+                                    width: 0.5
+                                },
+                                label: trace.node?.label || [],
+                                color: trace.node?.color || []
+                            },
+                            link: {
+                                source: trace.link?.source || [],
+                                target: trace.link?.target || [],
+                                value: trace.link?.value || [],
+                                color: trace.link?.color || []
+                            }
+                        };
+                    } else {
+                        return {
+                            type: trace.type || 'bar',
+                            x: trace.x || [],
+                            y: trace.y || [],
+                            name: trace.name || null,
+                            mode: 'markers'
+                        };
+                    }
                 }).filter(trace => trace !== null);
+
+                if (traces.length === 0) {
+                    throw new Error('没有有效的图表数据');
+                }
 
                 // 准备布局
                 const layout = {
                     title: {
-                        text: (data.layout && data.layout.title && data.layout.title.text) || '图表'
+                        text: data.layout?.title?.text || '图表'
                     },
-                    showlegend: (data.layout && data.layout.showlegend !== undefined) ? data.layout.showlegend : true,
-                    height: (data.layout && data.layout.height) || 600,
+                    showlegend: data.layout?.showlegend || false,
+                    height: data.layout?.height || 600,
                     xaxis: {
                         title: {
-                            text: (data.layout && data.layout.xaxis && data.layout.xaxis.title && data.layout.xaxis.title.text) || 'X轴'
+                            text: data.layout?.xaxis?.title?.text || 'X轴'
                         }
                     },
                     yaxis: {
                         title: {
-                            text: (data.layout && data.layout.yaxis && data.layout.yaxis.title && data.layout.yaxis.title.text) || 'Y轴'
+                            text: data.layout?.yaxis?.title?.text || 'Y轴'
                         }
                     }
                 };
-
-                console.log('准备绘制图表:', {
-                    id: chartWrapper.id,
-                    traces: traces,
-                    layout: layout
-                });
 
                 // 绘制图表
                 Plotly.newPlot(chartWrapper, traces, layout);
@@ -942,7 +985,7 @@
 
             } catch (error) {
                 console.error('生成图表时出错:', error);
-                alert('生成图表时出错: ' + error.message);
+                throw new Error(`生成图表时出错: ${error.message}`);
             }
         }
         

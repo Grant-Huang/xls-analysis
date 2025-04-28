@@ -1,7 +1,5 @@
-flask==3.0.2
+Flask==3.0.2
 pandas==2.2.1
 plotly==5.19.0
-numpy==1.26.4
 openpyxl==3.1.2
-python-dotenv==1.0.1
-werkzeug==3.0.1 
+Werkzeug==3.0.1 
