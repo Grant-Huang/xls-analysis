@@ -940,13 +940,30 @@
                                 color: trace.link?.color || []
                             }
                         };
+                    } else if (trace.type === 'scatter') {
+                        const scatterTrace = {
+                            type: 'scatter',
+                            mode: trace.mode || 'markers',
+                            x: trace.x || [],
+                            y: trace.y || [],
+                            name: trace.name || null
+                        };
+                        
+                        if (trace.marker) {
+                            scatterTrace.marker = trace.marker;
+                        }
+                        
+                        if (trace.line) {
+                            scatterTrace.line = trace.line;
+                        }
+                        
+                        return scatterTrace;
                     } else {
                         return {
                             type: trace.type || 'bar',
                             x: trace.x || [],
                             y: trace.y || [],
-                            name: trace.name || null,
-                            mode: 'markers'
+                            name: trace.name || null
                         };
                     }
                 }).filter(trace => trace !== null);
