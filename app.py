@@ -518,6 +518,92 @@ def analyze():
                         }
                     }
                 })
+            elif chart_type == 'scatter':
+                # 确保X轴和Y轴列存在
+                x_col = data.get('xAxis')
+                y_col = data.get('yAxis')
+                
+                if not all([x_col, y_col]):
+                    return jsonify({'error': '散点图需要X轴和Y轴列'})
+                
+                # 确保X轴和Y轴都是数值类型
+                df[x_col] = pd.to_numeric(df[x_col], errors='coerce')
+                df[y_col] = pd.to_numeric(df[y_col], errors='coerce')
+                
+                # 删除包含NaN的行
+                df = df.dropna(subset=[x_col, y_col])
+                
+                if df.empty:
+                    return jsonify({'error': '没有有效的数据可以生成散点图'})
+                
+                # 处理分组
+                group_col = data.get('groupBy')
+                if group_col:
+                    # 将分组列转换为字符串类型，并将 NaN 替换为 "未知"
+                    df[group_col] = df[group_col].astype(str)
+                    df[group_col] = df[group_col].replace('nan', '未知')
+                    
+                    # 获取所有唯一的分组值
+                    groups = sorted(df[group_col].unique())
+                    
+                    # 为每个分组分配唯一的颜色
+                    group_colors = {}
+                    for i, group in enumerate(groups):
+                        # 使用HSL颜色空间，确保颜色分布均匀
+                        hue = (i * 360) / len(groups)
+                        group_colors[group] = f'hsl({hue}, 70%, 50%)'
+                    
+                    # 按分组创建数据
+                    traces = []
+                    for group in groups:
+                        group_df = df[df[group_col] == group]
+                        traces.append({
+                            'type': 'scatter',
+                            'mode': 'markers',
+                            'x': group_df[x_col].tolist(),
+                            'y': group_df[y_col].tolist(),
+                            'name': str(group),
+                            'marker': {
+                                'color': group_colors[group],
+                                'size': 10
+                            }
+                        })
+                else:
+                    # 没有分组时，创建单个散点图
+                    traces = [{
+                        'type': 'scatter',
+                        'mode': 'markers',
+                        'x': df[x_col].tolist(),
+                        'y': df[y_col].tolist(),
+                        'marker': {
+                            'color': 'rgb(31, 119, 180)',
+                            'size': 10
+                        }
+                    }]
+                
+                if not traces:
+                    return jsonify({'error': '没有有效的数据可以生成散点图'})
+                
+                return jsonify({
+                    'data': traces,
+                    'layout': {
+                        'title': {
+                            'text': f'{y_col} 与 {x_col} 的相关性分析'
+                        },
+                        'showlegend': bool(group_col),
+                        'height': 600,
+                        'xaxis': {
+                            'title': {
+                                'text': x_col
+                            }
+                        },
+                        'yaxis': {
+                            'title': {
+                                'text': y_col
+                            }
+                        }
+                    }
+                })
             elif chart_type == 'line':
                 # 确保X轴和Y轴列存在
                 x_col = data.get('xAxis')
